@@ -15,7 +15,11 @@ const defaultSettings = {
     enabled: true,
     maxChars: 150,        // Max characters per generation
     contextMessages: 50,  // Number of recent messages to include
-    showLoading: true
+    showLoading: true,
+    // Custom API settings
+    apiEndpoint: "https://api.z.ai/api/coding/paas/v4/chat/completions",
+    apiKey: "",
+    apiModel: "zai-org/glm-5"
 };
 
 let isGenerating = false;
@@ -34,8 +38,23 @@ function getSettings() {
 
 async function loadSettings() {
     const settings = getSettings();
-    // Apply settings to UI if needed
+    // Apply settings to UI
     $("#impersonation-enabled").prop("checked", settings.enabled);
+    $("#impersonation-api-endpoint").val(settings.apiEndpoint);
+    $("#impersonation-api-key").val(settings.apiKey);
+    $("#impersonation-api-model").val(settings.apiModel);
+    $("#impersonation-max-chars").val(settings.maxChars);
+}
+
+function saveSettings() {
+    const settings = getSettings();
+    settings.enabled = $("#impersonation-enabled").prop("checked");
+    settings.apiEndpoint = $("#impersonation-api-endpoint").val();
+    settings.apiKey = $("#impersonation-api-key").val();
+    settings.apiModel = $("#impersonation-api-model").val();
+    settings.maxChars = parseInt($("#impersonation-max-chars").val()) || 150;
+    saveSettingsDebounced();
+    console.log("[Impersonation] Settings saved");
 }
 
 // ============================================
@@ -173,11 +192,16 @@ OUTPUT RULES:
 // ============================================
 
 async function generateContinuation() {
-    const context = getContext();
     const settings = getSettings();
     
     if (!settings.enabled) {
         console.log("[Impersonation] Extension disabled");
+        return null;
+    }
+    
+    // Check for API key
+    if (!settings.apiKey) {
+        toastr.warning("Please configure API key in Impersonation settings", "Impersonation");
         return null;
     }
     
@@ -189,13 +213,11 @@ async function generateContinuation() {
     // Build prompt
     const prompt = buildContinuationPrompt(currentInput, persona, chatHistory);
     
-    console.log("[Impersonation] Generating continuation...");
+    console.log("[Impersonation] Generating continuation via custom API...");
     
     try {
-        // Use generateQuietPrompt for context-aware generation
-        const result = await context.generateQuietPrompt({
-            quietPrompt: prompt,
-        });
+        // Call custom API directly
+        const result = await callCustomAPI(prompt);
         
         // Clean up the result
         let continuation = (result || "").trim();
@@ -216,9 +238,49 @@ async function generateContinuation() {
         
     } catch (error) {
         console.error("[Impersonation] Generation failed:", error);
-        toastr.error("Failed to generate continuation", "Impersonation");
+        toastr.error("Failed to generate continuation: " + error.message, "Impersonation");
         return null;
     }
+}
+
+// ============================================
+// Direct API Call
+// ============================================
+
+async function callCustomAPI(prompt) {
+    const settings = getSettings();
+    
+    const response = await fetch(settings.apiEndpoint, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${settings.apiKey}`,
+            "Accept-Language": "en-US,en"
+        },
+        body: JSON.stringify({
+            model: settings.apiModel,
+            messages: [
+                { role: "user", content: prompt }
+            ],
+            temperature: 0.8,
+            max_tokens: 500,
+            stream: false
+        })
+    });
+    
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API error ${response.status}: ${errorText}`);
+    }
+    
+    const data = await response.json();
+    
+    // OpenAI-compatible response format
+    if (data.choices && data.choices[0]?.message?.content) {
+        return data.choices[0].message.content;
+    }
+    
+    throw new Error("Unexpected API response format");
 }
 
 // ============================================
@@ -295,6 +357,80 @@ function injectWandButton() {
     console.log("[Impersonation] Wand button injected");
 }
 
+function injectSettingsPanel() {
+    // Check if already injected
+    if ($("#impersonation-settings").length > 0) {
+        return;
+    }
+    
+    const settings = getSettings();
+    
+    const html = `
+    <div id="impersonation-settings" class="impersonation-settings-panel">
+        <div class="impersonation-settings-header">
+            <h3>Impersonation Settings</h3>
+        </div>
+        <div class="impersonation-settings-body">
+            <div class="impersonation-setting">
+                <label for="impersonation-enabled">
+                    <input type="checkbox" id="impersonation-enabled" />
+                    Enable Extension
+                </label>
+            </div>
+            
+            <div class="impersonation-setting">
+                <label for="impersonation-api-endpoint">API Endpoint</label>
+                <input type="text" id="impersonation-api-endpoint" class="text_pole wide100p" 
+                       placeholder="https://api.z.ai/api/coding/paas/v4/chat/completions" />
+            </div>
+            
+            <div class="impersonation-setting">
+                <label for="impersonation-api-key">API Key</label>
+                <input type="password" id="impersonation-api-key" class="text_pole wide100p" 
+                       placeholder="Your API key" />
+            </div>
+            
+            <div class="impersonation-setting">
+                <label for="impersonation-api-model">Model</label>
+                <input type="text" id="impersonation-api-model" class="text_pole wide100p" 
+                       placeholder="glm-5" />
+            </div>
+            
+            <div class="impersonation-setting">
+                <label for="impersonation-max-chars">Max Characters</label>
+                <input type="number" id="impersonation-max-chars" class="text_pole" 
+                       min="50" max="500" value="150" />
+            </div>
+        </div>
+    </div>
+    `;
+    
+    // Find extension settings container
+    const container = $("#extensions_settings");
+    if (container.length === 0) {
+        console.error("[Impersonation] Settings container not found");
+        return;
+    }
+    
+    container.append(html);
+    
+    // Load current values
+    $("#impersonation-enabled").prop("checked", settings.enabled);
+    $("#impersonation-api-endpoint").val(settings.apiEndpoint);
+    $("#impersonation-api-key").val(settings.apiKey);
+    $("#impersonation-api-model").val(settings.apiModel);
+    $("#impersonation-max-chars").val(settings.maxChars);
+    
+    // Bind save handlers
+    $("#impersonation-enabled").on("change", saveSettings);
+    $("#impersonation-api-endpoint").on("input", saveSettings);
+    $("#impersonation-api-key").on("input", saveSettings);
+    $("#impersonation-api-model").on("input", saveSettings);
+    $("#impersonation-max-chars").on("input", saveSettings);
+    
+    console.log("[Impersonation] Settings panel injected");
+}
+
 // ============================================
 // Initialization
 // ============================================
@@ -307,6 +443,5 @@ jQuery(async () => {
     
     // Inject UI
     injectWandButton();
-    
-    console.log("[Impersonation] Extension loaded successfully");
+    injectSettingsPanel();
 });

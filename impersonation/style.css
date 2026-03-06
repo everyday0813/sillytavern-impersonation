@@ -63,3 +63,58 @@
         transform: rotate(360deg);
     }
 }
+
+/* Settings Panel */
+.impersonation-settings-panel {
+    margin-top: 10px;
+    padding: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.impersonation-settings-header h3 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+    color: var(--SmartThemeBodyColor, #ccc);
+}
+
+.impersonation-settings-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.impersonation-setting {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.impersonation-setting label {
+    font-size: 12px;
+    color: var(--SmartThemeBodyColor, #999);
+}
+
+.impersonation-setting input[type="checkbox"] {
+    margin-right: 6px;
+}
+
+.impersonation-setting .text_pole {
+    padding: 6px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(0, 0, 0, 0.3);
+    color: var(--SmartThemeBodyColor, #fff);
+    font-size: 12px;
+}
+
+.impersonation-setting .text_pole:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+.impersonation-setting .wide100p {
+    width: 100%;
+    box-sizing: border-box;
+}
